@@ -1,6 +1,35 @@
 <section class="panel workstation">
   <h3>{{ '试算批记录' if stage == 'batches' else '试配签发记录' }}</h3>
   {% if record %}<p role="status">{{ '已归档' if fresh else '已复用' }} {{ record.batch_id[:12] }}</p>{% endif %}
-  {% if pack %}<p>{{ '可试配' if pack.can_trial else '试配暂缓' }} · {{ pack.stock_lines }} 库存行 · {{ pack.isolation_lines }} 隔离行</p><p class="digest">{{ pack.integrity_sha256 }}</p><a class="download" href="/api/export/{{ pack.batch_id }}">下载配料证据</a>{% endif %}
+  {% if pack %}
+  <p>{{ '可试配' if pack.can_trial else '试配暂缓' }} · {{ pack.stock_lines }} 库存行 · {{ pack.isolation_lines }} 隔离行 ·
+    判定 {{ {'ISSUABLE': '可签发', 'AWAIT_REMEASURE': '待复测', 'BLOCKED': '暂缓'}[pack.release.decision] }}{% if pack.issued %} · 已签发{% endif %}</p>
+  {% if outcome %}<p role="status">{{ {'ISSUED': '签发完成', 'EXISTS': '已复用原签发件', 'HELD': '暂缓签发'}[outcome] }}{% if pack.certificate_id %} · 证书 {{ pack.certificate_id[:12] }}{% endif %}</p>{% endif %}
+  {% if pack.issued and pack.issued_at %}<p>签发时间 UTC {{ pack.issued_at }} · 原判依据已冻结，迟到校准不再改判。</p>{% endif %}
+  <p class="digest">{{ pack.integrity_sha256 }}</p>
+  {% if pack.release.pending %}
+  <h4>待复测原因</h4>
+  <div class="sheet"><table><thead><tr><th>越线检查</th><th>偏差角点（仪器 · 测量日 · 偏差）</th><th>干物 (g)</th><th>凝胶 (SAG)</th></tr></thead><tbody>
+    {% for row in pack.release.pending %}<tr>
+      <td>{{ {'dry': '干物下限', 'gel_low': '凝胶下界', 'gel_high': '凝胶上界'}[row.check] }}</td>
+      <td>{% for c in row.corner %}{{ c.device }} · {{ c.measured_on }} · {{ '%+d' % c.deviation_bp }} bp{% if not loop.last %}<br>{% endif %}{% else %}—{% endfor %}</td>
+      <td class="num">{{ row.dry_g }}</td><td class="num">{{ row.gel_sag or '—' }}</td></tr>{% endfor %}
+  </tbody></table></div>
+  {% endif %}
+  {% if pack.release.groups %}
+  <details><summary>校准分组 · {{ pack.release.groups|length }} 场</summary>
+  <div class="sheet"><table><thead><tr><th>仪器</th><th>测量日</th><th>偏差范围 (bp)</th><th>同场批次</th></tr></thead><tbody>
+    {% for g in pack.release.groups %}<tr><td>{{ g.device }}</td><td>{{ g.measured_on }}</td><td class="num">{{ '%+d' % g.low_bp }} ~ {{ '%+d' % g.high_bp }}</td><td>{{ g.lots|join(' · ') }}</td></tr>{% endfor %}
+  </tbody></table></div></details>
+  {% endif %}
+  {% if ignored %}<p>未采信的校准单：{% for row in ignored %}{{ row.reason }}（{{ row.entry.device }} · {{ row.entry.measured_on }}）{% if not loop.last %}；{% endif %}{% endfor %}</p>{% endif %}
+  <a class="download" href="/api/export/{{ pack.batch_id }}">下载配料证据</a>
+  {% if stage == 'certificate' and not pack.issued %}
+  <form method="post" action="/trial/certificate?batch={{ pack.batch_id }}">
+    <label class="wide">迟到校准单 JSON（可空）<textarea name="calibration" rows="2" placeholder='[{"device":"MA-1","measured_on":"2026-11-20","low_bp":-50,"high_bp":50,"lots":["PJ-01"]}]'></textarea></label>
+    <button>申请签发</button>
+  </form>
+  {% endif %}
+  {% endif %}
   <div class="sheet"><table><thead><tr><th>试算批</th><th>建立时间 UTC</th><th>耗时 (ms)</th></tr></thead><tbody>{% for row in entries %}<tr><td><a href="/trial/certificate?batch={{ row.batch_id }}">{{ row.batch_id[:16] }}</a></td><td>{{ row.created_at }}</td><td class="num">{{ row.elapsed_ms }}</td></tr>{% else %}<tr><td colspan="3"><a href="/trial/batches">先留档一批试配。</a></td></tr>{% endfor %}</tbody></table></div>
 </section>

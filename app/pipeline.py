@@ -1,5 +1,6 @@
 from .errors import TrialError
 from .modules.assay.service import receive
+from .modules.certificate.contract import entries as calibration_entries
 from .modules.dry.service import convert
 from .modules.formula.contract import normalize
 from .modules.formula.service import inspect
@@ -10,6 +11,7 @@ from .modules.stock.balance import reconcile
 def process(material, stage='archive'):
     if len(material['assays']) > 250_000:
         raise TrialError('ASSAYS_TOO_LARGE', 413)
+    material['calibration'] = calibration_entries(material.get('calibration'))
     assays = receive(material['assays'])
     result = {'assay': assays}
     if stage == 'assay':

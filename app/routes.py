@@ -1,9 +1,11 @@
-from flask import Blueprint, current_app, jsonify
+from flask import Blueprint, current_app, jsonify, request
 
+from .errors import TrialError
 from .input import from_request
 from .modules.batches.service import preserve
 from .modules.batches.storage import history, read
-from .modules.certificate.service import issue
+from .modules.certificate import service as certificate_service
+from .modules.certificate.contract import entries as calibration_entries
 from .pipeline import process
 
 api = Blueprint('trial_api', __name__, url_prefix='/api')
@@ -56,7 +58,25 @@ def batch(identifier):
 
 @api.get('/certificate/<identifier>')
 def certificate(identifier):
-    return issue(batch(identifier))
+    return certificate_service.current(current_app.config['ARCHIVE'], identifier)
+
+
+@api.post('/certificate/<identifier>')
+def sign(identifier):
+    body = request.get_json(silent=True)
+    if body is None:
+        body = {}
+    if not isinstance(body, dict) or set(body) - {'calibration'}:
+        raise TrialError('UNKNOWN_REQUEST_FIELD', 400)
+    result = certificate_service.sign(current_app.config['ARCHIVE'], identifier,
+                                      calibration_entries(body.get('calibration')))
+    outcome = result['outcome']
+    payload = {'created': outcome == 'ISSUED', 'applied': result['applied'], 'ignored': result['ignored']}
+    if outcome == 'HELD':
+        decision = result['pack']['release']['decision']
+        return {**payload, 'code': 'AWAIT_REMEASURE' if decision == 'AWAIT_REMEASURE' else 'NOT_ISSUABLE',
+                'certificate': None, 'release': result['pack']['release']}, 409
+    return {**payload, 'certificate': result['pack']}, 201 if outcome == 'ISSUED' else 200
 
 
 @api.get('/export/<identifier>')

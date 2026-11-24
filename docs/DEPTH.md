@@ -13,7 +13,7 @@
 | M4 整数配料寻优 | 按称量刻度求组合 | POST /api/blend | `app/modules/blend/search.py` | `tests/test_blend.py` `tests/test_solver_oracle.py` |
 | M5 领用与余量核算 | 核对库存、领用和缺口 | POST /api/stock | `app/modules/stock/balance.py` | `tests/test_stock.py` |
 | M6 批次留档复跑 | 留档并验证重复提交 | POST /api/batches | `app/modules/batches/storage.py` | `tests/test_batches.py` |
-| M7 试配证据签发 | 复核试配状态并下载 | GET /api/certificate/<id> | `app/modules/certificate/service.py` | `tests/test_certificate.py` |
+| M7 试配证据签发 | 复核试配状态、验方偏差并下载 | GET /api/certificate/<id> · POST /api/certificate/<id> | `app/modules/certificate/service.py` `app/modules/certificate/verify.py` | `tests/test_certificate.py` `tests/test_release.py` |
 
 ## 陷阱登记
 
@@ -28,6 +28,9 @@
 | TRAP-14 | PJ-06 双化验冲突 | 后写覆盖 | 两个原件行均隔离 | `app/modules/assay/service.py` | `tests/test_assay.py::test_contradictory_assays_disable_both` |
 | TRAP-15 | PJ-02 克和千克混写 | 重复入库 | 规范成克后判同批 | `app/modules/assay/units.py` | `tests/test_assay.py::test_kg_is_normalized_before_duplicate_detection` |
 | TRAP-19 | PJ-02 与 PJ-04 均可配 | 随记录顺序 | 先批数再到期，再按批号 | `app/modules/blend/search.py` | `tests/test_blend.py::test_conflicting_valid_choices_resolve_by_expiry` |
+| TRAP-21 | 同台同次批次共用一个水分偏差 | 把偏差拆到各批独立取极值，误扣本可开工的单 | 组内共享一个 δ，异台异场各自独立；各检查是 δ 的线性函数，按组取最劣端点 | `app/modules/certificate/verify.py` | `tests/test_release.py::test_shared_deviation_is_not_split` |
+| TRAP-22 | 校准单迟到但适用于测量当日 | 签发后改判或漏判 | 未签发留档单合入迟到校准重新验方；已签单冻结原判依据 | `app/modules/certificate/service.py` | `tests/test_release.py::test_late_calibration_reverifies_unsigned_record` |
+| TRAP-23 | 签发请求重试或并发 | 重复出单 | 证书按批号一次性原子落盘，重试与并发都复用首份 | `app/modules/certificate/store.py` | `tests/test_release.py::test_concurrent_sign_freezes_single_certificate` |
 
 ## 对账规则
 
